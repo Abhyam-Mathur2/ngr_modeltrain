@@ -1,0 +1,9 @@
+ultralytics
+fastapi
+uvicorn
+opencv-python
+numpy
+roboflow
+torch
+torchvision
+torchaudio
