@@ -1,0 +1,29 @@
+# Datasets
+yolo_dataset/
+severity_dataset/
+archive/
+archive2/
+pothole-detection-DatasetNinja/
+Street-Light-1/
+datasets/
+
+# Training runs and weights
+runs/
+*.pt
+*.onnx
+*.engine
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db

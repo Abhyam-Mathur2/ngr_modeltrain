@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nagar Rakshak | Hybrid AI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f0f2f5; font-family: sans-serif; overflow-x: hidden; }
+        .header-bar { background: #1a2a3a; color: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .main-container { padding: 15px; }
+        .view-card { background: white; border-radius: 8px; padding: 10px; height: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .view-card h6 { border-bottom: 2px solid #eee; padding-bottom: 5px; margin-bottom: 10px; color: #555; text-transform: uppercase; font-size: 0.8rem; }
+        .img-fluid { width: 100%; height: auto; border-radius: 4px; object-fit: contain; max-height: 60vh; }
+        .stats-strip { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .stat-item { padding: 5px 15px; border-radius: 4px; font-weight: bold; font-size: 0.9rem; border: 1px solid #ddd; }
+        .bg-total { background: #e9ecef; }
+        .bg-minor { background: #d4edda; color: #155724; }
+        .bg-medium { background: #fff3cd; color: #856404; }
+        .bg-major { background: #f8d7da; color: #721c24; }
+        .upload-compact { background: white; padding: 10px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #ddd; }
+        #loadingOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; }
+    </style>
+</head>
+<body>
+
+    <div id="loadingOverlay">
+        <div class="spinner-border text-primary mb-2"></div>
+        <b>AI Processing...</b>
+    </div>
+
+    <div class="header-bar">
+        <h5 class="m-0">NAGAR RAKSHAK <small style="font-size: 0.6em; opacity: 0.7;">Hybrid Pipeline (M1 + M2)</small></h5>
+        <div class="stats-strip m-0" id="topStats" style="display:none">
+            <div class="stat-item bg-total" id="sTotal">Total: 0</div>
+            <div class="stat-item bg-minor" id="sMinor">Minor: 0</div>
+            <div class="stat-item bg-medium" id="sMedium">Medium: 0</div>
+            <div class="stat-item bg-major" id="sMajor">Major: 0</div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="upload-compact d-flex align-items-center justify-content-between">
+            <input type="file" id="uploadInput" accept="image/*" class="form-control form-control-sm" style="max-width: 300px;">
+            <button class="btn btn-primary btn-sm px-4" onclick="uploadImage()">Run Hybrid Analysis</button>
+        </div>
+
+        <div id="noPotholeAlert" class="alert alert-success py-2" style="display:none">
+            ✅ No potholes detected by M1. The road appears safe.
+        </div>
+
+        <div class="row g-3">
+            <!-- Col 1: Original -->
+            <div class="col-md-4">
+                <div class="view-card text-center">
+                    <h6>1. Input Image</h6>
+                    <img id="imgOrig" src="https://placehold.co/600x400?text=Upload+Image" class="img-fluid">
+                </div>
+            </div>
+            <!-- Col 2: M1 -->
+            <div class="col-md-4">
+                <div class="view-card text-center">
+                    <h6>2. M1 Output (Detection)</h6>
+                    <img id="imgM1" src="https://placehold.co/600x400?text=M1+Output" class="img-fluid">
+                </div>
+            </div>
+            <!-- Col 3: M2 -->
+            <div class="col-md-4">
+                <div class="view-card text-center">
+                    <h6>3. M2 Output (Severity)</h6>
+                    <img id="imgM2" src="https://placehold.co/600x400?text=M2+Output" class="img-fluid">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Preview local file immediately
+        document.getElementById('uploadInput').onchange = e => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = rs => document.getElementById('imgOrig').src = rs.target.result;
+                reader.readAsDataURL(file);
+            }
+        };
+
+        async function uploadImage() {
+            const input = document.getElementById('uploadInput');
+            if (!input.files[0]) return alert("Select an image");
+
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            
+            const formData = new FormData();
+            formData.append('file', input.files[0]);
+
+            try {
+                const res = await fetch('/predict', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                // Update Images
+                document.getElementById('imgM1').src = "data:image/png;base64," + data.m1_base64;
+                document.getElementById('imgM2').src = "data:image/png;base64," + data.m2_base64;
+
+                // Update Stats
+                const c = data.counts;
+                document.getElementById('sTotal').innerText = `Total: ${c.total}`;
+                document.getElementById('sMinor').innerText = `Minor: ${c.minor}`;
+                document.getElementById('sMedium').innerText = `Medium: ${c.medium}`;
+                document.getElementById('sMajor').innerText = `Major: ${c.major}`;
+                
+                document.getElementById('topStats').style.display = 'flex';
+                document.getElementById('noPotholeAlert').style.display = c.total === 0 ? 'block' : 'none';
+
+            } catch (e) {
+                console.error(e);
+                alert("Error communicating with AI server");
+            } finally {
+                document.getElementById('loadingOverlay').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
