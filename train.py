@@ -23,9 +23,17 @@ def train():
         epochs=50,
         imgsz=640,
         device=0,      # Use GPU 0
-        batch=8,       # Adjusted for 8GB VRAM
+        batch=4,       # Reduced to 4 for yolov8x on 8GB VRAM
         name="broken_street_v8x",
-        project="runs/detect"
+        project="runs/detect",
+        
+        # Explicit Optimization and Loss Configuration
+        optimizer='AdamW',  # Optimization method: AdamW (Adam with Weight Decay)
+        lr0=0.01,           # Initial learning rate
+        box=7.5,            # Box loss gain (how much the model focuses on box accuracy)
+        cls=0.5,            # Class loss gain (how much the model focuses on class accuracy)
+        dfl=1.5,            # Distribution Focal Loss gain
+        nbs=64              # Nominal batch size for normalization
     )
     
     print("Training complete.")

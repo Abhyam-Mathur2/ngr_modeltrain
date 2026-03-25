@@ -1,6 +1,6 @@
-#? /bin/bash
+#!/bin/bash
 #PBS -N broken_street_yolov8
-#PBS -l nodes=1:ppn=8:gpus=1
+#PBS -l select=1:ncpus=8:ngpus=1
 #PBS -l walltime=24:00:00
 #PBS -q gpu
 #PBS -o logs/train_out.log
@@ -9,15 +9,15 @@
 # Change to the directory where the job was submitted
 cd $PBS_O_WORKDIR
 
-# Load Python and CUDA modules (Adjust names based on your HPC's 'module avail')
-module load python/3.10
-module load cuda/11.8
+# Load CUDA module
+module load cuda/12.8
 
 # Create logs directory if it doesn't exist
 mkdir -p logs
 
-# Install/Update dependencies in user space if not already in a virtualenv
-pip install --upgrade ultralytics opencv-python roboflow --user
+# Install/Update dependencies in user space using python3 -m pip
+python3 -m pip install --upgrade -r requirements.txt --user
 
-# Run the training script
-python train.py
+# Run the training scripts using python3
+python3 train.py
+python3 train_severity.py

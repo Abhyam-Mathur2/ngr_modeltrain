@@ -1,0 +1,184 @@
+NAGAR RAKSHAK - M1/M2 DETAILED STATUS REPORT
+Date: 2026-03-23
+
+============================================================
+1) CURRENT SYSTEM STATE (WHAT M1 AND M2 ARE DOING NOW)
+============================================================
+
+M1 (Detection):
+- Framework: Ultralytics YOLO (detection task).
+- Runtime loading behavior: main.py now selects the latest detection checkpoint from runs/detect/**/weights/best.pt.
+- Current practical checkpoint selected by latest-timestamp logic:
+  runs/detect/runs/detect/broken_street_v8x4_recover3/weights/best.pt
+- Current class names in that model:
+  class 0 = broken street
+  class 1 = street light
+- Result: M1 is active and returns detections correctly with class_name and confidence.
+
+M2 (Severity):
+- Intended framework: YOLO classification model (not EfficientNet in current implementation).
+- Expected search paths in code:
+  1) weights/severity_best.pt
+  2) runs/classify/runs/classify/pothole_severity_v8x/weights/best.pt
+  3) runs/classify/pothole_severity_v8x/weights/best.pt
+- Current state: no checkpoint found in those paths during verification.
+- Result: M2 severity model is currently not loaded (severity_model = None), so severity is not truly being inferred right now.
+
+Answer to EfficientNet question:
+- No. Current M2 path expects a YOLO classification checkpoint.
+- EfficientNet is not currently wired as M2 in the running code.
+
+
+============================================================
+2) WHAT PROBLEMS WE FACED
+============================================================
+
+A) Training resume failed from last.pt:
+- Error: checkpoint had NaN/Inf corruption.
+- Impact: standard resume=True from last.pt could not continue.
+
+B) Recovery training hit host memory issue:
+- Error: DataLoader worker MemoryError during mosaic augmentation.
+- Impact: training crashed before completing with previous settings.
+
+C) API startup import issue:
+- Error: cannot import YOLO from ultralytics.
+- Root cause: local repo contains ultralytics source, but Python import resolution did not consistently pick it when launching main.py.
+
+D) Frontend showed no detections on sample image:
+- Root cause 1: backend was previously falling back to generic yolov8m.pt in some states.
+- Root cause 2: model/task semantics mismatch in UI wording (UI said pothole while model classes were broken street/street light).
+
+E) M2 confusion:
+- UI implied hybrid severity always active, but no severity checkpoint existed in expected locations.
+
+
+============================================================
+3) ALL CHANGES MADE (CODE + BEHAVIOR)
+============================================================
+
+Change Set 1: Recovery training launcher script added.
+- File created: resume_recover.py
+- Purpose:
+  - Start from best.pt instead of corrupted last.pt.
+  - Apply torch.load compatibility patch.
+  - Use safer training settings to reduce memory pressure.
+- Final stabilized settings used:
+  - imgsz=512
+  - batch=2
+  - workers=0
+  - mosaic=0.0
+  - mixup=0.0
+  - copy_paste=0.0
+  - run name: broken_street_v8x4_recover3
+
+Change Set 2: main.py import reliability fix.
+- sys.path insertion for local ultralytics source moved before importing YOLO.
+- Effect: backend can import YOLO reliably from local repo source.
+
+Change Set 3: Detection model selection logic fixed in main.py.
+- Old behavior:
+  - filtered only for finetuned_feedback first, then often fell to fallback model.
+- New behavior:
+  - Prefer latest feedback-tuned checkpoint if present.
+  - Else choose latest available detection best.pt from runs/detect/**/weights/best.pt.
+  - Only if none exist, use fallback list ending with yolov8m.pt.
+- Effect: app now uses your trained model checkpoint instead of generic fallback in normal conditions.
+
+Change Set 4: Prediction payload + overlay semantics improved in main.py.
+- Added class_name to each detection in JSON response.
+- M1 overlay label changed from hardcoded "Pothole" to actual detected class text.
+- Added severity candidate filter:
+  - severity is attempted only for class names resembling road-damage terms.
+- M2 overlay label:
+  - shows severity if available,
+  - otherwise shows detected class.
+- Effect: output is now truthful to model behavior and easier to debug.
+
+Change Set 5: Frontend wording and detection panel updates in index.html.
+- "No potholes detected" changed to "No road defects detected".
+- "Not a Pothole" button changed to "Wrong Detection".
+- Detection list now displays:
+  - class_name
+  - confidence
+  - severity (or N/A)
+- Effect: UI now reflects model outputs more accurately and avoids misleading pothole-only phrasing.
+
+
+============================================================
+4) RESULTS FROM THESE CHANGES (OBSERVED)
+============================================================
+
+Training result:
+- Recovery run completed successfully:
+  runs/detect/runs/detect/broken_street_v8x4_recover3
+- Completion summary observed:
+  - 12 epochs completed
+  - best.pt and last.pt exported
+  - validation finished successfully
+
+API integration result:
+- Frontend route (/) confirmed reachable (HTTP 200).
+- /predict endpoint confirmed reachable and returning JSON with base64 output images.
+- /feedback endpoint confirmed working and returning success when called with image_id.
+
+Detection behavior result after fixes:
+- Sample upload test returned a positive detection:
+  - total=1
+  - first_class=broken street
+- Server log also showed inference line with class "broken street".
+
+M2 status result:
+- No severity checkpoint found at configured paths.
+- Therefore M2 severity model not loaded currently.
+- Hybrid pipeline structure is present in code, but real severity inference is inactive until a valid classification checkpoint is provided.
+
+
+============================================================
+5) WHAT THE APP IS DOING RIGHT NOW (END-TO-END FLOW)
+============================================================
+
+1. User uploads image from frontend.
+2. Frontend sends multipart request to /predict.
+3. Backend stores image in static/uploads with UUID name.
+4. M1 model runs detection on image.
+5. For each detection:
+   - class_name and confidence are produced.
+   - if severity model exists AND class is severity-candidate, M2 classification runs on crop.
+6. Backend returns:
+   - m1_base64 image
+   - m2_base64 image
+   - counts
+   - detections[] with box/conf/class_name/severity
+7. Frontend renders both output panels and detection rows.
+8. If user flags wrong detection, frontend sends /feedback with image_id and boolean flag.
+
+
+============================================================
+6) IMPORTANT NOTE ABOUT CLASS TAXONOMY
+============================================================
+
+Current M1 classes are:
+- broken street
+- street light
+
+So if your business expectation is strictly pothole-only detection, either:
+- retrain M1 with pothole taxonomy, or
+- remap classes in post-processing to desired labels.
+
+Without taxonomy alignment, UI/business interpretation can appear incorrect even when model inference is working.
+
+
+============================================================
+7) RECOMMENDED NEXT STEP
+============================================================
+
+To fully activate M2 severity:
+- Place a valid severity classification checkpoint at one of:
+  - weights/severity_best.pt
+  - runs/classify/runs/classify/pothole_severity_v8x/weights/best.pt
+  - runs/classify/pothole_severity_v8x/weights/best.pt
+
+Once present, M2 will load automatically on backend startup.
+
+End of report.

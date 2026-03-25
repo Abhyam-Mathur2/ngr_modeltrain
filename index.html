@@ -1,27 +1,188 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-store">
     <title>Nagar Rakshak | Hybrid AI</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f0f2f5; font-family: sans-serif; overflow-x: hidden; }
-        .header-bar { background: #1a2a3a; color: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
-        .main-container { padding: 15px; }
-        .view-card { background: white; border-radius: 8px; padding: 10px; height: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .view-card h6 { border-bottom: 2px solid #eee; padding-bottom: 5px; margin-bottom: 10px; color: #555; text-transform: uppercase; font-size: 0.8rem; }
-        .img-fluid { width: 100%; height: auto; border-radius: 4px; object-fit: contain; max-height: 60vh; }
-        .stats-strip { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
-        .stat-item { padding: 5px 15px; border-radius: 4px; font-weight: bold; font-size: 0.9rem; border: 1px solid #ddd; }
-        .bg-total { background: #e9ecef; }
-        .bg-minor { background: #d4edda; color: #155724; }
-        .bg-medium { background: #fff3cd; color: #856404; }
-        .bg-major { background: #f8d7da; color: #721c24; }
-        .upload-compact { background: white; padding: 10px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #ddd; }
-        #loadingOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; }
+        body {
+            background-color: #f0f2f5;
+            font-family: sans-serif;
+            overflow-x: hidden;
+        }
+
+        .header-bar {
+            background: #1a2a3a;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .main-container {
+            padding: 15px;
+        }
+
+        .view-card {
+            background: white;
+            border-radius: 8px;
+            padding: 10px;
+            height: 100%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .view-card h6 {
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+            color: #555;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+        }
+
+        .img-fluid {
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+            object-fit: contain;
+            max-height: 55vh;
+        }
+
+        .stats-strip {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            padding: 5px 15px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            border: 1px solid #ddd;
+        }
+
+        .bg-total {
+            background: #e9ecef;
+        }
+
+        .bg-minor {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .bg-medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .bg-major {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .upload-compact {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+        }
+
+        #loadingOverlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.85);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        /* Detection list */
+        #detectionPanel {
+            background: white;
+            border-radius: 8px;
+            padding: 14px;
+            margin-top: 14px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+        }
+
+        #detectionPanel h6 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: #555;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+
+        .det-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 0.9rem;
+        }
+
+        .det-row.minor {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .det-row.medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .det-row.major {
+            background: #fde8ea;
+            color: #721c24;
+        }
+
+        .det-row.unknown {
+            background: #e9ecef;
+            color: #333;
+        }
+
+        .det-row.flagged {
+            background: #e2e3e5;
+            color: #888;
+            text-decoration: line-through;
+        }
+
+        .flag-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 4px 12px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .flag-btn:hover {
+            background: #b02a37;
+        }
+
+        .flag-btn:disabled {
+            background: #6c757d;
+            cursor: default;
+        }
     </style>
 </head>
+
 <body>
 
     <div id="loadingOverlay">
@@ -30,8 +191,8 @@
     </div>
 
     <div class="header-bar">
-        <h5 class="m-0">NAGAR RAKSHAK <small style="font-size: 0.6em; opacity: 0.7;">Hybrid Pipeline (M1 + M2)</small></h5>
-        <div class="stats-strip m-0" id="topStats" style="display:none">
+        <h5 class="m-0">NAGAR RAKSHAK <small style="font-size:0.6em;opacity:0.7;">Hybrid Pipeline (M1 + M2)</small></h5>
+        <div class="stats-strip" id="topStats" style="display:none">
             <div class="stat-item bg-total" id="sTotal">Total: 0</div>
             <div class="stat-item bg-minor" id="sMinor">Minor: 0</div>
             <div class="stat-item bg-medium" id="sMedium">Medium: 0</div>
@@ -41,30 +202,28 @@
 
     <div class="main-container">
         <div class="upload-compact d-flex align-items-center justify-content-between">
-            <input type="file" id="uploadInput" accept="image/*" class="form-control form-control-sm" style="max-width: 300px;">
+            <input type="file" id="uploadInput" accept="image/*" class="form-control form-control-sm"
+                style="max-width:300px;">
             <button class="btn btn-primary btn-sm px-4" onclick="uploadImage()">Run Hybrid Analysis</button>
         </div>
 
         <div id="noPotholeAlert" class="alert alert-success py-2" style="display:none">
-            ✅ No potholes detected by M1. The road appears safe.
+            &#10003; No road defects detected by M1.
         </div>
 
         <div class="row g-3">
-            <!-- Col 1: Original -->
             <div class="col-md-4">
                 <div class="view-card text-center">
                     <h6>1. Input Image</h6>
                     <img id="imgOrig" src="https://placehold.co/600x400?text=Upload+Image" class="img-fluid">
                 </div>
             </div>
-            <!-- Col 2: M1 -->
             <div class="col-md-4">
                 <div class="view-card text-center">
                     <h6>2. M1 Output (Detection)</h6>
                     <img id="imgM1" src="https://placehold.co/600x400?text=M1+Output" class="img-fluid">
                 </div>
             </div>
-            <!-- Col 3: M2 -->
             <div class="col-md-4">
                 <div class="view-card text-center">
                     <h6>3. M2 Output (Severity)</h6>
@@ -72,25 +231,35 @@
                 </div>
             </div>
         </div>
+
+        <!-- Detection list with flag buttons -->
+        <div id="detectionPanel" style="display:none">
+            <h6>Detections &mdash; Flag any wrong detections to improve the AI</h6>
+            <div id="detectionList"></div>
+        </div>
     </div>
 
     <script>
-        // Preview local file immediately
+        let currentImageId = null;
+        let detections = [];
+
         document.getElementById('uploadInput').onchange = e => {
             const file = e.target.files[0];
             if (file) {
                 const reader = new FileReader();
                 reader.onload = rs => document.getElementById('imgOrig').src = rs.target.result;
                 reader.readAsDataURL(file);
+                document.getElementById('detectionPanel').style.display = 'none';
+                document.getElementById('detectionList').innerHTML = '';
             }
         };
 
         async function uploadImage() {
             const input = document.getElementById('uploadInput');
-            if (!input.files[0]) return alert("Select an image");
+            if (!input.files[0]) return alert('Select an image first.');
 
             document.getElementById('loadingOverlay').style.display = 'flex';
-            
+
             const formData = new FormData();
             formData.append('file', input.files[0]);
 
@@ -98,27 +267,97 @@
                 const res = await fetch('/predict', { method: 'POST', body: formData });
                 const data = await res.json();
 
-                // Update Images
-                document.getElementById('imgM1').src = "data:image/png;base64," + data.m1_base64;
-                document.getElementById('imgM2').src = "data:image/png;base64," + data.m2_base64;
+                currentImageId = data.image_id;
+                detections = data.detections;
 
-                // Update Stats
+                document.getElementById('imgM1').src = 'data:image/png;base64,' + data.m1_base64;
+                document.getElementById('imgM2').src = 'data:image/png;base64,' + data.m2_base64;
+
                 const c = data.counts;
-                document.getElementById('sTotal').innerText = `Total: ${c.total}`;
-                document.getElementById('sMinor').innerText = `Minor: ${c.minor}`;
-                document.getElementById('sMedium').innerText = `Medium: ${c.medium}`;
-                document.getElementById('sMajor').innerText = `Major: ${c.major}`;
-                
+                document.getElementById('sTotal').innerText = 'Total: ' + c.total;
+                document.getElementById('sMinor').innerText = 'Minor: ' + c.minor;
+                document.getElementById('sMedium').innerText = 'Medium: ' + c.medium;
+                document.getElementById('sMajor').innerText = 'Major: ' + c.major;
+
                 document.getElementById('topStats').style.display = 'flex';
                 document.getElementById('noPotholeAlert').style.display = c.total === 0 ? 'block' : 'none';
 
-            } catch (e) {
-                console.error(e);
-                alert("Error communicating with AI server");
+                renderDetectionList(detections);
+
+            } catch (err) {
+                console.error(err);
+                alert('Error communicating with AI server.');
             } finally {
                 document.getElementById('loadingOverlay').style.display = 'none';
             }
         }
+
+        function renderDetectionList(dets) {
+            const panel = document.getElementById('detectionPanel');
+            const list = document.getElementById('detectionList');
+            list.innerHTML = '';
+
+            if (!dets || dets.length === 0) {
+                panel.style.display = 'none';
+                return;
+            }
+
+            dets.forEach((det, i) => {
+                const sev = det.severity || 'unknown';
+                const detClass = (det.class_name || 'defect').toUpperCase();
+                const conf = (det.conf * 100).toFixed(1);
+                const cls = sev.includes('minor') ? 'minor'
+                    : sev.includes('medium') ? 'medium'
+                        : sev.includes('major') ? 'major'
+                            : 'unknown';
+                const label = sev !== 'unknown' ? sev.split('_')[0].toUpperCase() : 'N/A';
+
+                const row = document.createElement('div');
+                row.className = 'det-row ' + cls;
+                row.id = 'det-row-' + i;
+                row.innerHTML = `
+                    <span><strong>Detection ${i + 1}</strong> &mdash; Class: <strong>${detClass}</strong> &mdash; Confidence: ${conf}% &mdash; Severity: <strong>${label}</strong></span>
+                    <button class="flag-btn" id="flag-btn-${i}" onclick="flagFalsePositive(${i})">&#10007; Wrong Detection</button>
+                `;
+                list.appendChild(row);
+            });
+
+            panel.style.display = 'block';
+        }
+
+        async function flagFalsePositive(index) {
+            if (!currentImageId) return;
+            if (!confirm('Mark this detection as a false positive? This will help train the AI to avoid similar mistakes.')) return;
+
+            const btn = document.getElementById('flag-btn-' + index);
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+
+            const formData = new FormData();
+            formData.append('image_id', currentImageId);
+            formData.append('is_false_positive', 'true');
+
+            try {
+                const res = await fetch('/feedback', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    btn.textContent = '&#10003; Flagged';
+                    document.getElementById('det-row-' + index).classList.add('flagged');
+                    // Mark all other buttons for same image as flagged too
+                    document.querySelectorAll('.flag-btn').forEach(b => {
+                        b.disabled = true;
+                        if (!b.textContent.includes('Flagged')) b.textContent = 'Image saved';
+                    });
+                } else {
+                    btn.textContent = 'Error';
+                }
+            } catch (err) {
+                console.error(err);
+                btn.textContent = 'Failed';
+            }
+        }
     </script>
 </body>
+
 </html>

@@ -1,0 +1,227 @@
+\documentclass[twocolumn]{article}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{xurl}
+\usepackage{array}
+\usepackage{float}
+\usepackage{multirow}
+\geometry{a4paper, margin=0.75in}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=blue,
+    citecolor=blue,
+}
+
+\title{\textbf{Nagar Rakshak: Data-Centric Pothole Detection and Severity Pipeline with Ultralytics YOLO Customization}}
+\author{NGR-YOLOv8 Project Team}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+This paper documents the complete research and engineering progress of the NGR-YOLOv8 project up to the current state of development. The system is designed as a two-stage pipeline: M1 for road-defect detection and M2 for severity classification. Beyond standard YOLOv8 training, this work includes substantial data-centric redesign, runtime integration updates, and direct source-code customization of the local Ultralytics library. We report all currently available quantitative results from saved run artifacts and project logs, including multi-class and single-class detector phases, checkpoint recovery experiments, and M2 training status. The strongest recorded detection result in project logs is from the refined single-class setting (precision 94.7\%, recall 91.6\%, mAP@0.5 95.7\%, mAP@0.5:0.95 81.5\%). The best result in currently available run CSV artifacts is from \texttt{broken\_street\_v8x4\_recover3} (precision 78.3\%, recall 56.3\%, mAP@0.5 64.4\%, mAP@0.5:0.95 35.7\%). We further provide a full change-log of modifications made on top of base Ultralytics, including Lion optimizer integration, Coordinate Attention modules, Mish activation support, and MPDIoU metric support.
+\end{abstract}
+
+\section{Introduction}
+Road-surface defect analytics is a high-impact application of real-time computer vision, where operational value depends not only on raw recall but also on low false-positive rates and stable deployment behavior. This project began with a multi-class YOLOv8 detector and evolved into a broader research and engineering effort involving:
+\begin{itemize}
+    \item dataset consolidation from heterogeneous sources,
+    \item data-centric false-positive reduction using negative samples,
+    \item M1+M2 pipeline design for detection plus severity,
+    \item post-training feedback loops,
+    \item and direct modifications to Ultralytics internals.
+\end{itemize}
+
+The objective of this paper is archival: to record exactly what has been done, what results were obtained, what source-level changes were introduced into the local Ultralytics fork, and what components remain incomplete.
+
+\section{System Overview}
+\subsection{Current Runtime Pipeline}
+The deployed FastAPI service (\texttt{main.py}) implements the following workflow:
+\begin{enumerate}
+    \item receive uploaded image,
+    \item run M1 detector and produce bounding boxes,
+    \item run M2 severity classification on selected crops when an M2 checkpoint is available,
+    \item return two overlays (M1 and M2 visualizations), per-detection metadata, and counters.
+\end{enumerate}
+
+The runtime model-selection logic prioritizes recent trained checkpoints under \texttt{runs/detect/**/weights/best.pt} and falls back to default pretrained weights only if no project checkpoints exist.
+
+\subsection{M1 and M2 Roles}
+\begin{itemize}
+    \item \textbf{M1 (Detection):} YOLO-based bounding-box detection of road defects (historically either two classes or single class depending on dataset version).
+    \item \textbf{M2 (Severity):} YOLO-based severity classification of detected crops into levels (minor, medium, major), integrated as a second-stage module when an M2 checkpoint is available.
+\end{itemize}
+
+\section{Datasets and Data Engineering}
+\subsection{Base Dataset Construction}
+The initial dataset builder (\texttt{prepare\_dataset.py}) integrates:
+\begin{itemize}
+    \item archive2 annotations and images,
+    \item DatasetNinja pothole data,
+    \item additional road-scene imagery from Roboflow exports.
+\end{itemize}
+All inputs are mapped into YOLO format with class mapping:
+\begin{itemize}
+    \item class 0: broken street,
+    \item class 1: legacy auxiliary class used in earlier multi-class experiments.
+\end{itemize}
+
+\subsection{Dataset Split Ratios (Train/Validation/Test)}
+The project uses YOLO-style \textbf{train/validation} organization for detector development. In multiple scripts, the default random split is:
+\[
+\text{Train} : \text{Validation} = 80:20
+\]
+
+Concrete split behavior is as follows:
+\begin{itemize}
+    \item \textbf{archive2 in \texttt{prepare\_dataset.py}:} if \texttt{archive/splits.json} contains entries, those predefined train/test lists are respected; otherwise a random 80/20 assignment is applied.
+    \item \textbf{DatasetNinja in \texttt{prepare\_dataset.py}:} random 80/20 split into train and val.
+    \item \textbf{Roboflow street-light data in \texttt{prepare\_dataset.py}:} source \texttt{train} is mapped to project train, while source \texttt{valid} and \texttt{test} are both mapped to project val.
+    \item \textbf{Refined background addition in \texttt{prepare\_background\_dataset.py}:} background images are shuffled and split 80/20 (reported as 520 train and 131 val, total 651 negatives).
+    \item \textbf{Severity dataset in \texttt{prepare\_severity\_dataset.py}:} cropped severity samples use random 80/20 split with \texttt{TRAIN\_SPLIT=0.8}.
+\end{itemize}
+
+Important evaluation note: for M1 detector experiments, there is \textbf{no separate held-out test directory in the core YAML files}; model-selection metrics are primarily validation-based (Precision, Recall, mAP@0.5, mAP@0.5:0.95).
+
+\subsection{Refined Data Strategy for False-Positive Reduction}
+The refined dataset pipeline (\texttt{prepare\_background\_dataset.py}) applies two major changes:
+\begin{enumerate}
+    \item remove class 1 labels to form single-class detection,
+    \item inject negative/background road images (clean/smooth road) with no labels.
+\end{enumerate}
+
+Project logs report \textbf{651 negative images} added (520 train, 131 val).
+
+\subsection{Feedback-Driven Fine-Tuning Data}
+The script \texttt{fine\_tune\_feedback.py} builds \texttt{combined\_dataset} by:
+\begin{itemize}
+    \item copying refined base training/validation splits,
+    \item appending false-positive feedback images,
+    \item oversampling feedback items by a factor of 50.
+\end{itemize}
+This enables hard-negative focused adaptation without relabeling the full corpus.
+
+\section{Training Configuration History}
+\subsection{Detection Training Phases}
+Table \ref{tab:training_phases} summarizes the key M1 training phases.
+
+\begin{table}[H]
+\centering
+\caption{M1 Training Phases and Configuration Evolution}
+\label{tab:training_phases}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}lllll@{}}
+\toprule
+\textbf{Run/Phase} & \textbf{Classes} & \textbf{Backbone} & \textbf{Notable Settings} & \textbf{Status} \\ \midrule
+\texttt{broken\_street\_v8x4} & 2 & YOLOv8x & AdamW, imgsz 640, batch 4 & Interrupted/unstable tail \\
+\texttt{broken\_street\_v8x4\_recover3} & 2 & YOLOv8x (from best.pt) & imgsz 512, batch 2, workers 0, mosaic/mixup/copy\_paste disabled & Completed (12 epochs) \\
+\texttt{refined\_pothole\_v8m} (reported) & 1 & YOLOv8m & AdamW, imgsz 640, batch 8, refined negatives & Completed in report \\
+\texttt{pothole\_finetuned\_feedback} & 1 & warm-start from best & feedback oversampling, lr0 5e-4, 30 epochs & Scripted/iterative \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Severity Training Variants}
+M2 experimentation is maintained as a YOLO-only severity track:
+\begin{itemize}
+    \item YOLO classification experiments on cropped pothole regions,
+    \item severity-label data preparation from M1 detections for minor/medium/major classes,
+    \item application-layer M1+M2 integration for conditional severity inference.
+\end{itemize}
+
+\subsection{Reproducible Training Setup}
+The practical end-to-end setup used in this project is:
+\begin{enumerate}
+    \item install Python dependencies from \texttt{requirements.txt},
+    \item download/acquire raw datasets (Roboflow exports, archive2, DatasetNinja),
+    \item generate YOLO detection dataset via \texttt{prepare\_dataset.py},
+    \item optionally generate refined single-class dataset with negatives via \texttt{prepare\_background\_dataset.py},
+    \item train detector using one of \texttt{train.py}, \texttt{train\_refined.py}, or \texttt{resume\_recover.py},
+    \item prepare severity crops via \texttt{prepare\_severity\_dataset.py}, then train M2 using \texttt{train\_severity.py} or \texttt{train\_m2\_custom.py}.
+\end{enumerate}
+
+Environment and stability adjustments recorded in project reports include:
+\begin{itemize}
+    \item PyTorch 2.6.0 with CUDA 12.4,
+    \item reduced dataloader and augmentation pressure during recovery runs (workers=0, mosaic/mixup/copy\_paste disabled),
+    \item checkpoint recovery by restarting from \texttt{best.pt} when \texttt{last.pt} was corrupted.
+\end{itemize}
+
+\subsection{What Changed Across Training Iterations}
+Key model-development changes across the project timeline are summarized below:
+\begin{itemize}
+    \item \textbf{Taxonomy change:} moved from a two-class detector (broken street + street light) to a focused single-class detector for road defects in refined training.
+    \item \textbf{Data change:} added large-scale good-road negative samples to suppress false positives.
+    \item \textbf{Recovery change:} after resume instability, shifted to recovery training from stable \texttt{best.pt} with memory-safe hyperparameters.
+    \item \textbf{Feedback loop change:} introduced hard-negative fine-tuning with 50$\times$ oversampling of user feedback samples.
+    \item \textbf{System change:} integrated dynamic latest-checkpoint loading and optional M2 severity inference in the API pipeline.
+\end{itemize}
+
+\section{Results}
+\subsection{Results from Available Run CSV Artifacts}
+Table \ref{tab:csv_results} reports best values directly extracted from saved CSV logs in \texttt{runs/detect/runs/detect}.
+
+\begin{table}[H]
+\centering
+\caption{Verified Metrics from Available CSV Runs}
+\label{tab:csv_results}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Run} & \textbf{Precision} & \textbf{Recall} & \textbf{mAP@0.5} & \textbf{mAP@0.5:0.95} \\ \midrule
+\texttt{broken\_street\_v8x4} (best observed) & 74.8\% & 59.2\% & 65.0\% & 34.5\% \\
+\texttt{broken\_street\_v8x4\_recover3} (best observed) & 78.3\% & 56.3\% & 64.4\% & 35.7\% \\
+\texttt{broken\_street\_v8x4\_recover3} (epoch 12 final) & 75.8\% & 56.8\% & 63.9\% & 35.3\% \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\subsection{Reported Single-Class Metrics}
+Project status logs and prior progress reports record the following result for \texttt{refined\_pothole\_v8m}:
+\begin{itemize}
+    \item precision 94.7\%,
+    \item recall 91.6\%,
+    \item mAP@0.5 95.7\%,
+    \item mAP@0.5:0.95 81.5\%.
+\end{itemize}
+
+These metrics are retained as \textbf{reported historical results}. The corresponding run directory is not present in currently available run folders, so this paper marks them as report-derived rather than artifact-reparsed.
+
+\subsection{Qualitative Findings}
+Across logs and integration tests:
+\begin{itemize}
+    \item API endpoints (/ and /predict) were confirmed operational,
+    \item detector inference returns class labels and confidences correctly,
+    \item sample uploads produced positive detections after model-selection fixes,
+    \item M2 inference is conditional and depends on severity checkpoint availability.
+\end{itemize}
+
+\section{Ultralytics Library Modifications}
+This project includes direct source-code edits to the local Ultralytics fork. Table \ref{tab:ultra_changes} summarizes all confirmed modifications against the vendored repository status.
+
+\begin{table*}[t]
+\centering
+\caption{Confirmed Source-Level Changes Made to Local Ultralytics Library}
+\label{tab:ultra_changes}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.28\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
+\toprule
+\textbf{File} & \textbf{Change Summary} \\ \midrule
+\path{ultralytics/engine/trainer.py} & Added \texttt{Lion} to supported optimizer set; added optimizer-argument branch for Lion (lower LR scaling); integrated custom Lion class loading from \texttt{ultralytics.utils.optimizers}. \\
+\path{ultralytics/utils/optimizers.py} & New file implementing Lion optimizer (EvoLved Sign Momentum) with momentum-sign update rule and optional weight decay. \\
+\path{ultralytics/nn/modules/block.py} & Added \texttt{CoordAtt} module (Coordinate Attention) and \texttt{C2fCoordAtt} block for enhanced spatial attention in backbone stages. \\
+\path{ultralytics/nn/modules/__init__.py} & Exported new modules \texttt{CoordAtt} and \texttt{C2fCoordAtt}. \\
+\path{ultralytics/nn/tasks.py} & Registered \texttt{CoordAtt} and \texttt{C2fCoordAtt} in model parser sets so YAML model configs can instantiate them. \\
+\path{ultralytics/nn/modules/conv.py} & Added \texttt{Mish} activation class and enabled \texttt{act="Mish"} branch in convolution module constructor. \\
+\path{ultralytics/utils/metrics.py} & Extend

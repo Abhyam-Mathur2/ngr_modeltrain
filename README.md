@@ -24,12 +24,13 @@ Once the raw data is downloaded, run the preparation script to organize it into 
 python prepare_dataset.py
 ```
 
-### 4. Training (Optional)
-If you don't have the pre-trained weights (`best.pt`), you can train the model yourself:
-```bash
-python train.py
-```
-This will create a `runs/` directory with the trained weights.
+### 4. Model Weights
+Since trained weights are large, they are not in the repo. 
+1. Create a folder named `weights/` in the root directory.
+2. Place the detection model as `weights/best.pt`.
+3. Place the severity classification model as `weights/severity_best.pt`.
+
+If these files are missing, the server will fall back to the default `yolov8x.pt` (which won't detect potholes).
 
 ### 5. Running the Inference Server
 To start the FastAPI server for detection:

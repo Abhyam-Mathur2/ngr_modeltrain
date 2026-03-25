@@ -1,0 +1,242 @@
+  NGR-YOLOv8 COMPARISON REPORT
+Generated: 2026-03-24
+
+====================================================================
+1) PURPOSE
+====================================================================
+This file consolidates a detailed comparison of:
+- What was used earlier in YOLO training/inference
+- What was changed in architecture and training stack
+- What is only implemented in code vs what is currently active in runtime/training
+- Which reported metrics are directly artifact-verified vs report-derived
+
+====================================================================
+2) EARLIER (BASELINE) VS CHANGED (CUSTOMIZED) SUMMARY
+====================================================================
+A) Detector backbone and architecture blocks
+Earlier:
+- Standard YOLOv8 family blocks (C2f-based backbone/head as provided by Ultralytics).
+- Typical model variants used in project history: YOLOv8x and YOLOv8m.
+
+Changed:
+- Added Coordinate Attention module (CoordAtt).
+- Added C2fCoordAtt block (C2f followed by CoordAtt).
+- Created custom architecture YAML replacing multiple backbone C2f blocks with C2fCoordAtt.
+
+Current status:
+- Custom architecture is available and trainable via research launcher.
+- Production/inference model depends on loaded checkpoint; runtime loads latest best.pt from runs.
+
+Evidence:
+- ultralytics/ultralytics/nn/modules/block.py (CoordAtt, C2fCoordAtt)
+- scripts/yolov8-pothole-research.yaml (C2fCoordAtt in backbone)
+- scripts/train_m1_research.py (loads custom YAML)
+
+
+B) Optimizer
+Earlier:
+- AdamW in standard and recovery workflows.
+
+Changed:
+- Lion optimizer added to Ultralytics trainer support.
+- Custom Lion optimizer implementation added.
+- Research training script explicitly uses optimizer='Lion'.
+
+Current status:
+- Lion is fully wired and selectable.
+- Active optimizer depends on each training command/script.
+
+Evidence:
+- ultralytics/ultralytics/engine/trainer.py (Lion added in optimizer list/branch)
+- ultralytics/ultralytics/utils/optimizers.py (Lion implementation)
+- scripts/train_m1_research.py (optimizer='Lion')
+- resume_recover.py (uses AdamW for recover3)
+
+
+C) Activation function
+Earlier:
+- Default YOLO Conv activation path (SiLU).
+
+Changed:
+- Mish activation class added.
+- Conv path updated to allow act='Mish'.
+- Research launcher passes activation='Mish'.
+
+Current status:
+- Mish support is implemented.
+- Actual activation depends on training config used.
+
+Evidence:
+- ultralytics/ultralytics/nn/modules/conv.py (Mish class and branch)
+- scripts/train_m1_research.py (activation='Mish')
+
+
+D) Box regression loss / IoU variant
+Earlier:
+- CIoU used in bbox loss path during training.
+
+Changed:
+- MPDIoU option added in bbox_iou utility function.
+
+Current status (important):
+- Training loss currently still calls bbox_iou(..., CIoU=True) in BboxLoss.
+- Therefore MPDIoU is implemented-capable but not currently the active training loss path unless further wired.
+
+Evidence:
+- ultralytics/ultralytics/utils/metrics.py (MPDIoU flag and formula)
+- ultralytics/ultralytics/utils/loss.py (BboxLoss currently uses CIoU=True)
+
+
+E) Model parser/registry integration
+Earlier:
+- Parser supported stock Ultralytics modules.
+
+Changed:
+- CoordAtt and C2fCoordAtt exported in nn/modules __init__.
+- Parser/task module imports and module sets updated so YAML can instantiate custom modules.
+
+Current status:
+- Custom modules are registered and parseable from model YAML.
+
+Evidence:
+- ultralytics/ultralytics/nn/modules/__init__.py
+- ultralytics/ultralytics/nn/tasks.py
+
+
+F) Training strategy and run stability
+Earlier:
+- Multi-class detector runs with higher-memory settings.
+- Resume from last.pt encountered corruption in one workflow.
+
+Changed:
+- Recovery strategy switched to best.pt start.
+- Safer training params for stability: lower batch, lower workers, disabled mosaic/mixup/copy_paste.
+
+Current status:
+- recover3 run completed with stable output artifacts.
+
+Evidence:
+- resume_recover.py
+- runs/detect/runs/detect/broken_street_v8x4_recover3/results.csv
+- M1_M2_DETAILED_STATUS_REPORT.txt
+
+====================================================================
+3) DETAILED CHANGE LOG (WHAT WAS MODIFIED IN CODE)
+====================================================================
+1. ultralytics/ultralytics/utils/optimizers.py
+- New Lion optimizer class implementation (sign-momentum update rule).
+
+2. ultralytics/ultralytics/engine/trainer.py
+- Added Lion into supported optimizer set.
+- Added Lion-specific optimizer args branch.
+- Added Lion class loading/instantiation path.
+
+3. ultralytics/ultralytics/nn/modules/block.py
+- Added CoordAtt module.
+- Added C2fCoordAtt module.
+
+4. ultralytics/ultralytics/nn/modules/__init__.py
+- Exported CoordAtt and C2fCoordAtt so they are importable by parser/tasks.
+
+5. ultralytics/ultralytics/nn/tasks.py
+- Imported custom modules.
+- Added custom modules into parser base module and repeat module sets.
+
+6. ultralytics/ultralytics/nn/modules/conv.py
+- Added Mish activation class.
+- Added Mish selection logic in Conv constructor branch.
+
+7. ultralytics/ultralytics/utils/metrics.py
+- Extended bbox_iou with MPDIoU flag and computation path.
+
+8. scripts/yolov8-pothole-research.yaml
+- Replaced backbone C2f blocks with C2fCoordAtt in multiple stages.
+- Kept YOLO detection head structure, with custom backbone upgrades.
+
+9. scripts/train_m1_research.py
+- Uses custom architecture YAML.
+- Uses Lion optimizer.
+- Requests Mish activation.
+- Runs from-scratch due architecture mismatch with stock pretrained weights.
+
+10. resume_recover.py
+- Recovery training launcher from best.pt.
+- Stable settings to avoid memory crashes in previous path.
+
+====================================================================
+4) WHAT IS ACTIVE RIGHT NOW VS WHAT IS JUST AVAILABLE
+====================================================================
+A) In current API runtime (main.py):
+- Active detector is latest best.pt from runs/detect path.
+- Runtime does not automatically force research YAML; it serves whichever checkpoint is selected.
+
+B) In current M2 runtime path:
+- M2 now uses EfficientNet checkpoint path and EfficientNet inference function (current main.py version).
+- This is separate from YOLO architecture customization in M1.
+
+C) For training:
+- If training is started via research launcher, custom stack (CoordAtt + Lion + Mish) is intended.
+- If training is started via other scripts/commands, stack may remain standard (for example AdamW and standard model cfg).
+
+D) Box loss reality:
+- MPDIoU exists in utility function.
+- CIoU still used by BboxLoss in current loss path.
+- So MPDIoU is not the active default box loss in present code path.
+
+====================================================================
+5) METRIC TABLE REALITY CHECK (FROM AVAILABLE CSV ARTIFACTS)
+====================================================================
+Verified artifact files:
+- runs/detect/runs/detect/broken_street_v8x4/results.csv
+- runs/detect/runs/detect/broken_street_v8x4_recover3/results.csv
+
+Verified values found from CSV parsing:
+- broken_street_v8x4_recover3 best observed:
+  Precision 78.3%, Recall 56.3%, mAP@0.5 64.4%, mAP@0.5:0.95 35.7%
+- broken_street_v8x4_recover3 epoch 12 final:
+  Precision 75.8%, Recall 56.8%, mAP@0.5 63.9%, mAP@0.5:0.95 35.3%
+
+Important caveat for broken_street_v8x4 row in report table:
+- Precision 74.8% comes from a different epoch than recall/mAP values.
+- Recall 59.2%, mAP@0.5 65.0%, mAP@0.5:0.95 34.5% align with epoch 35.
+- Therefore the row is a mixed "best observed" aggregation, not a single-epoch snapshot.
+
+====================================================================
+6) EARLIER VS CHANGED QUICK MATRIX
+====================================================================
+Component: Optimizer
+- Earlier: AdamW
+- Changed: Lion added and usable
+- Active now: depends on selected training script
+
+Component: Backbone block
+- Earlier: C2f
+- Changed: C2fCoordAtt available; custom YAML uses it
+- Active now: only when model trained from that custom YAML/checkpoint
+
+Component: Activation
+- Earlier: SiLU default
+- Changed: Mish added
+- Active now: only when act='Mish' is passed
+
+Component: Box loss IoU mode
+- Earlier: CIoU
+- Changed: MPDIoU function support added
+- Active now: CIoU still active in BboxLoss path
+
+Component: Parser support
+- Earlier: stock modules only
+- Changed: CoordAtt and C2fCoordAtt registered
+- Active now: active whenever YAML references those modules
+
+====================================================================
+7) PRACTICAL CONCLUSION
+====================================================================
+Your YOLO codebase has real structural/training-stack upgrades (CoordAtt blocks, Lion optimizer, Mish support, MPDIoU path).
+However, one key distinction matters:
+- Implemented capability != active default behavior.
+In current code, MPDIoU is implemented but CIoU remains the active bbox loss path unless explicitly rewired.
+
+This distinction should be clearly stated in reports/papers to avoid over-claiming active training behavior.
+
+End of comparison report.
